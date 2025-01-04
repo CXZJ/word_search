@@ -2,6 +2,11 @@ from collections import deque
 import time
 import random
 import string
+import cv2
+import numpy as np
+import pytesseract
+from PIL import Image
+import google.generativeai as genai
 
 class TrieNode:
     def __init__(self):
@@ -296,53 +301,157 @@ def evaluate(grid, words):
     
     print("-" * 85)
 
-def main():
-    # Test case 1: Small number of short words
-    simple_words = ["cat", "rat", "car", "art", "arc", "cart"]
-    
-    # Test case 2: More words with overlapping patterns
-    overlapping_words = [
-        "cat", "catch", "cater", "caters",
-        "rat", "rate", "rates", "rating",
-        "car", "cart", "carts", "carting",
-        "art", "arts", "artist", "artistic"
-    ]
-    
-    # Test case 3: Dictionary words (filtered by length)
+def capture_and_process_word_search():
     try:
-        with open('/usr/share/dict/words', 'r') as f:
-            all_words = f.readlines()
-        dictionary_words = [word.strip().lower() for word in all_words 
-                          if 3 <= len(word.strip()) <= 8][:50]
-    except:
-        dictionary_words = [
-            "python", "program", "code", "algorithm",
-            "search", "find", "word", "grid", "test",
-            "computer", "data", "string", "array"
+        # Initialize camera
+        cap = cv2.VideoCapture(0)
+        
+        if not cap.isOpened():
+            print("Error: Could not open camera")
+            return None, None
+            
+        print("\nInstructions:")
+        print("1. Show the entire word search puzzle (including word list)")
+        print("2. Make sure it's well lit and clearly visible")
+        print("3. Press SPACE to capture when ready")
+        print("4. Press Q to quit\n")
+            
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Could not read frame")
+                break
+                
+            cv2.imshow('Word Search Scanner', frame)
+            
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord(' '):
+                cv2.imwrite('captured_puzzle.jpg', frame)
+                print("\nImage captured! Processing with Gemini...")
+                break
+            elif key == ord('q'):
+                print("\nCancelled by user")
+                cap.release()
+                cv2.destroyAllWindows()
+                return None, None
+        
+        cap.release()
+        cv2.destroyAllWindows()
+        
+        # Process with Gemini
+        return process_with_gemini('captured_puzzle.jpg')
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        if 'cap' in locals():
+            cap.release()
+        cv2.destroyAllWindows()
+        return None, None
+
+def process_with_gemini(image_path):
+    try:
+        # Configure Gemini API
+        genai.configure(api_key='AIzaSyB_-GoxMD_Myomyk161VloCIVCqGRYsjSE')  # Replace with your API key
+        
+        # Use gemini-1.5-pro-vision model (latest version)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Load and prepare image
+        image = Image.open(image_path)
+        
+        # Prompt for Gemini
+        prompt = """
+        Analyze this word search puzzle image and extract:
+        1. The letter grid
+        2. The list of words to find
+        
+        Format your response exactly like this:
+        GRID:
+        [
+            ['a', 'b', 'c'],
+            ['d', 'e', 'f'],
+            ['g', 'h', 'i']
         ]
 
-    test_cases = {
-        "Simple Test (6 words)": simple_words,
-        "Overlapping Patterns (16 words)": overlapping_words,
-        "Dictionary Words": dictionary_words
-    }
+        WORDS:
+        ['word1', 'word2', 'word3']
 
-    sizes = [10, 15, 20]
-
-    for test_name, words in test_cases.items():
-        print(f"\n=== {test_name} ===")
+        Please ensure:
+        - All letters are lowercase
+        - Grid is properly aligned
+        - Words are in a simple list format
+        """
         
-        for size in sizes:
-            print(f"\n--- Grid Size: {size}x{size} ---")
+        # Generate response
+        response = model.generate_content([prompt, image])
+        
+        if response.text:
+            print("\nGemini Response:", response.text)  # Added for debugging
+            return parse_gemini_response(response.text)
+        else:
+            print("Error: No response from Gemini")
+            return None, None
             
-            grid, placed_words = generate_word_search(words, grid_size=size)
-            
-            print("\nGrid Preview (first 5 rows):")
-            for row in grid[:5]:
-                print(' '.join(row))
-            
-            # Use only placed words for evaluation
-            evaluate(grid, placed_words)
+    except Exception as e:
+        print(f"Error processing with Gemini: {str(e)}")
+        print("Try using a different model version or check your API key")
+        return None, None
+
+def parse_gemini_response(response_text):
+    try:
+        # Split response into grid and words sections
+        grid_section = response_text.split('GRID:')[1].split('WORDS:')[0].strip()
+        words_section = response_text.split('WORDS:')[1].strip()
+        
+        # Parse grid (convert string representation to actual 2D array)
+        grid = eval(grid_section)
+        
+        # Parse words (convert string representation to actual list)
+        words = eval(words_section)
+        
+        return grid, words
+        
+    except Exception as e:
+        print(f"Error parsing Gemini response: {str(e)}")
+        print("Raw response:", response_text)
+        return None, None
+
+def list_available_models():
+    try:
+        # Configure Gemini API
+        genai.configure(api_key='AIzaSyB_-GoxMD_Myomyk161VloCIVCqGRYsjSE')  # Replace with your API key
+        
+        # List available models
+        models = genai.list_models()
+        
+        print("Available Models:")
+        for model in models:
+            print(f"Model Name: {model.name}, Supported Methods: {model.supported_methods}")
+    
+    except Exception as e:
+        print(f"Error listing models: {str(e)}")
+
+def main():
+    print("Please show a word search puzzle to the camera...")
+    grid, words = capture_and_process_word_search()
+    
+    if grid and words:
+        print("\nDetected Grid:")
+        print("-" * (len(grid[0]) * 2 + 1))
+        for row in grid:
+            print("|" + " ".join(row) + "|")
+        print("-" * (len(grid[0]) * 2 + 1))
+        
+        print("\nWords to find:", words)
+        
+        # Only run evaluation if we have valid data
+        if len(grid) > 0 and len(words) > 0:
+            print("\nPerformance Comparison:")
+            evaluate(grid, words)
+        else:
+            print("\nError: Invalid grid or word list")
+    else:
+        print("\nError: Could not process word search puzzle")
 
 if __name__ == "__main__":
     main()
