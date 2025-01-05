@@ -261,10 +261,10 @@ def generate_word_search(words, grid_size=10):
 
 def evaluate(grid, words):
     algorithms = [
-        ("Aho-Corasick (Trie)", AhoCorasickWithTrie()),
-        ("Aho-Corasick", AhoCorasickWithoutTrie()),
-        ("Backtracking (Trie)", "backtracking_with_trie"),
-        ("Backtracking", "backtracking_without_trie")
+        ("Aho-Corasick (Trie)", AhoCorasickWithTrie(), "O(m * n)"),  # m: number of words, n: length of longest word
+        ("Aho-Corasick", AhoCorasickWithoutTrie(), "O(m)"),  # m: number of words
+        ("Backtracking (Trie)", "backtracking_with_trie", "O(m)"),  # m: number of words
+        ("Backtracking", "backtracking_without_trie", "O(m)"),  # m: number of words
     ]
 
     print("\nGrid:")
@@ -275,10 +275,10 @@ def evaluate(grid, words):
 
     print("\nPerformance Comparison:")
     print("-" * 85)
-    print(f"{'Algorithm':<20} {'Time (s)':<12} {'Words Found':<12} {'Sample Words Found':<40}")
+    print(f"{'Algorithm':<20} {'Time (s)':<12} {'Space Complexity':<20} {'Words Found':<12} {'Sample Words Found':<40}")
     print("-" * 85)
     
-    for name, algo in algorithms:
+    for name, algo, space_complexity in algorithms:
         if isinstance(algo, str):
             start_time = time.time()
             if algo == "backtracking_with_trie":
@@ -297,7 +297,7 @@ def evaluate(grid, words):
             
         exec_time = end_time - start_time
         sample = list(found_words)[:4] if found_words else []
-        print(f"{name:<20} {exec_time:<12.6f} {len(found_words):<12} {', '.join(sample):<40}")
+        print(f"{name:<20} {exec_time:<12.6f} {space_complexity:<20} {len(found_words):<12} {', '.join(sample):<40}")
     
     print("-" * 85)
 
