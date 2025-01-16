@@ -7,6 +7,9 @@ import numpy as np
 import pytesseract
 from PIL import Image
 import google.generativeai as genai
+import colorama
+from colorama import Fore, Back, Style
+import tracemalloc
 
 class TrieNode:
     def __init__(self):
@@ -63,8 +66,10 @@ class AhoCorasickWithTrie:
                 child.fail = failure.children[char] if failure else self.root
 
     def search(self, grid):
+        tracemalloc.start()
+        
         rows, cols = len(grid), len(grid[0])
-        results = set()
+        results = {}  # Changed from set to dict to store positions
         directions = [(0, 1), (1, 0), (1, 1), (-1, 1),
                      (0, -1), (-1, 0), (-1, -1), (1, -1)]
 
@@ -73,11 +78,12 @@ class AhoCorasickWithTrie:
                 for dx, dy in directions:
                     x, y = i, j
                     node = self.root
+                    positions = []
                     
                     while 0 <= x < rows and 0 <= y < cols:
                         char = grid[x][y].lower()
+                        positions.append((x, y))
                         
-                        # Follow failure links
                         while node and char not in node.children:
                             node = node.fail
                             
@@ -87,11 +93,15 @@ class AhoCorasickWithTrie:
                             
                         node = node.children[char]
                         if node.is_end_of_word:
-                            results.add(node.word)
+                            results[node.word] = positions.copy()
                             
                         x, y = x + dx, y + dy
-                        
-        return results
+        
+        # Get memory usage
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        
+        return results, current, peak
 
 class AhoCorasickWithoutTrie:
     def __init__(self):
@@ -108,8 +118,10 @@ class AhoCorasickWithoutTrie:
         self.words_set = set(self.words)
 
     def search(self, grid):
+        tracemalloc.start()
+        
         rows, cols = len(grid), len(grid[0])
-        results = set()
+        results = {}
         directions = [(0, 1), (1, 0), (1, 1), (-1, 1),
                      (0, -1), (-1, 0), (-1, -1), (1, -1)]
 
@@ -118,14 +130,22 @@ class AhoCorasickWithoutTrie:
                 for dx, dy in directions:
                     x, y = i, j
                     word = ""
+                    positions = []
                     while 0 <= x < rows and 0 <= y < cols and len(word) <= self.max_word_length:
                         word += grid[x][y].lower()
+                        positions.append((x, y))
                         if word in self.words_set:
-                            results.add(word)
+                            results[word] = positions.copy()
                         x, y = x + dx, y + dy
-        return results
+                        
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        
+        return results, current, peak
 
 def backtracking_with_trie(grid, words):
+    tracemalloc.start()
+    
     trie = Trie()
     for word in words:
         trie.insert(word)
@@ -139,27 +159,33 @@ def backtracking_with_trie(grid, words):
             return
             
         current_node = node.children[char]
+        current_path = path + [(x, y)]
+        
         if current_node.is_end_of_word:
-            results.add(current_node.word)
+            results[current_node.word] = current_path
 
-        if (x, y) not in path:
-            path.add((x, y))
-            next_x, next_y = x + dx, y + dy
-            dfs(next_x, next_y, current_node, path, dx, dy)
-            path.remove((x, y))
+        next_x, next_y = x + dx, y + dy
+        if 0 <= next_x < rows and 0 <= next_y < cols:
+            dfs(next_x, next_y, current_node, current_path, dx, dy)
 
     rows, cols = len(grid), len(grid[0])
-    results = set()
+    results = {}
     directions = [(0, 1), (1, 0), (1, 1), (-1, 1),
                  (0, -1), (-1, 0), (-1, -1), (1, -1)]
 
     for i in range(rows):
         for j in range(cols):
             for dx, dy in directions:
-                dfs(i, j, trie.root, set(), dx, dy)
-    return results
+                dfs(i, j, trie.root, [], dx, dy)
+                
+    current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    
+    return results, current, peak
 
 def backtracking_without_trie(grid, words):
+    tracemalloc.start()
+    
     def dfs(x, y, path, current_word, dx, dy):
         if not (0 <= x < rows and 0 <= y < cols):
             return
@@ -168,20 +194,20 @@ def backtracking_without_trie(grid, words):
             return
             
         new_word = current_word + grid[x][y].lower()
+        current_path = path + [(x, y)]
+        
         if new_word in words_set:
-            results.add(new_word)
+            results[new_word] = current_path
             
         if not any(word.startswith(new_word) for word in words_set):
             return
 
-        if (x, y) not in path:
-            path.add((x, y))
-            next_x, next_y = x + dx, y + dy
-            dfs(next_x, next_y, path, new_word, dx, dy)
-            path.remove((x, y))
+        next_x, next_y = x + dx, y + dy
+        if 0 <= next_x < rows and 0 <= next_y < cols:
+            dfs(next_x, next_y, current_path, new_word, dx, dy)
 
     rows, cols = len(grid), len(grid[0])
-    results = set()
+    results = {}
     words_set = set(word.lower() for word in words)
     max_word_length = max(len(word) for word in words)
     directions = [(0, 1), (1, 0), (1, 1), (-1, 1),
@@ -190,8 +216,12 @@ def backtracking_without_trie(grid, words):
     for i in range(rows):
         for j in range(cols):
             for dx, dy in directions:
-                dfs(i, j, set(), "", dx, dy)
-    return results
+                dfs(i, j, [], "", dx, dy)
+                
+    current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    
+    return results, current, peak
 
 def generate_word_search(words, grid_size=10):
     # Sort words by length (longest first) and filter out words too long for grid
@@ -261,30 +291,24 @@ def generate_word_search(words, grid_size=10):
 
 def evaluate(grid, words):
     algorithms = [
-        ("Aho-Corasick (Trie)", AhoCorasickWithTrie(), "O(m * n)"),  # m: number of words, n: length of longest word
-        ("Aho-Corasick", AhoCorasickWithoutTrie(), "O(m)"),  # m: number of words
-        ("Backtracking (Trie)", "backtracking_with_trie", "O(m)"),  # m: number of words
-        ("Backtracking", "backtracking_without_trie", "O(m)"),  # m: number of words
+        ("Aho-Corasick (Trie)", AhoCorasickWithTrie(), "O(m * n)"),
+        ("Aho-Corasick", AhoCorasickWithoutTrie(), "O(m)"),
+        ("Backtracking (Trie)", "backtracking_with_trie", "O(m)"),
+        ("Backtracking", "backtracking_without_trie", "O(m)")
     ]
 
-    print("\nGrid:")
-    print("-" * (len(grid[0]) * 2 + 1))
-    for row in grid:
-        print("|" + " ".join(row) + "|")
-    print("-" * (len(grid[0]) * 2 + 1))
-
     print("\nPerformance Comparison:")
-    print("-" * 85)
-    print(f"{'Algorithm':<20} {'Time (s)':<12} {'Space Complexity':<20} {'Words Found':<12} {'Sample Words Found':<40}")
-    print("-" * 85)
+    print("-" * 100)
+    print(f"{'Algorithm':<20} {'Time (s)':<12} {'Memory (bytes)':<15} {'Peak Memory':<15} {'Words Found':<12}")
+    print("-" * 100)
     
     for name, algo, space_complexity in algorithms:
         if isinstance(algo, str):
             start_time = time.time()
             if algo == "backtracking_with_trie":
-                found_words = backtracking_with_trie(grid, words)
+                found_words, current_memory, peak_memory = backtracking_with_trie(grid, words)
             else:
-                found_words = backtracking_without_trie(grid, words)
+                found_words, current_memory, peak_memory = backtracking_without_trie(grid, words)
             end_time = time.time()
         else:
             for word in words:
@@ -292,14 +316,17 @@ def evaluate(grid, words):
             if hasattr(algo, 'build_failure_links'):
                 algo.build_failure_links()
             start_time = time.time()
-            found_words = algo.search(grid)
+            found_words, current_memory, peak_memory = algo.search(grid)
             end_time = time.time()
             
         exec_time = end_time - start_time
-        sample = list(found_words)[:4] if found_words else []
-        print(f"{name:<20} {exec_time:<12.6f} {space_complexity:<20} {len(found_words):<12} {', '.join(sample):<40}")
+        print(f"{name:<20} {exec_time:<12.6f} {current_memory:<15} {peak_memory:<15} {len(found_words):<12}")
+        
+        # Visualize the first algorithm's results
+        if name == "Aho-Corasick (Trie)":
+            visualize_found_words(grid, found_words)
     
-    print("-" * 85)
+    print("-" * 100)
 
 def capture_and_process_word_search():
     try:
@@ -430,6 +457,43 @@ def list_available_models():
     
     except Exception as e:
         print(f"Error listing models: {str(e)}")
+
+def visualize_found_words(grid, word_positions):
+    colorama.init()
+
+    # Create a grid of colors (None means no highlighting)
+    color_grid = [[None for _ in range(len(grid[0]))] for _ in range(len(grid))]
+    
+    # Assign different colors to different words
+    colors = [Fore.RED, Fore.GREEN, Fore.YELLOW, Fore.BLUE, Fore.MAGENTA, Fore.CYAN]
+    color_idx = 0
+    
+    # Print word locations first
+    print("\nFound Words Locations:")
+    for word, positions in word_positions.items():
+        current_color = colors[color_idx % len(colors)]
+        print(f"{current_color}{word}{Style.RESET_ALL}: ", end="")
+        
+        # Mark positions in color grid
+        for x, y in positions:
+            color_grid[x][y] = current_color
+            print(f"({x},{y})", end=" ")
+        print()
+        color_idx += 1
+    
+    # Print the colored grid
+    print("\nVisualized Grid:")
+    print("-" * (len(grid[0]) * 2 + 1))
+    for i, row in enumerate(grid):
+        print("|", end="")
+        for j, char in enumerate(row):
+            color = color_grid[i][j]
+            if color:
+                print(f"{color}{char}{Style.RESET_ALL}", end=" ")
+            else:
+                print(char, end=" ")
+        print("|")
+    print("-" * (len(grid[0]) * 2 + 1))
 
 def main():
     print("Please show a word search puzzle to the camera...")
